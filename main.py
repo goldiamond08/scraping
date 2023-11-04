@@ -1,33 +1,88 @@
+import threading
 import time
-
 from selenium import webdriver
 from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 
-# Initialize WebDriver
-# Enable headless mode
-
 chrome_options = webdriver.ChromeOptions()
-
-# Disable JavaScript
 chrome_options.add_argument('--disable-javascript')
-
-# Disable images
 chrome_options.add_argument('--blink-settings=imagesEnabled=false')
-
 driver = webdriver.Chrome(options=chrome_options)
-
-
-# Navigate to the website
 driver.get(
     'https://www.paginasamarillas.es/search/all-ac/all-ma/madrid/all-is/madrid/all-ba/all-pu/all-nc/1?what=a&where=Madrid&ub=false&aprob=0.739575053332198&nprob=0.260424946667802&qc=true')
-
-# Wait for the initial page to load
-
-
 with open('C:\\Users\\goldi\\Downloads\\buisnessPhones\\phones.txt', 'w') as file:
     pass
+
+name = "no name yet"
+claim_text = "no claim text yet"
+website_url = "no url yet"
+phone_number = "no phone yet"
+
+
+def scrape_element(i, driver):
+    j = 1
+    # Scraping
+    global name
+    global website_url
+    global claim_text
+    global phone_number
+    html = driver.page_source
+    try:
+        soup = BeautifulSoup(html, 'html.parser')
+       #  print("element " + str(j) + " found at index " + str(i))
+       #  j += 1
+        details_div = soup.find('div', class_='contenedor')
+       #  print("element " + str(j) + " found at index " + str(i))
+       #  j += 1
+        contact_div = details_div.find('div', class_='detalles-contacto')
+       #  print("element " + str(j) + " found at index " + str(i))
+       #  j += 1
+        content_div = contact_div.find('div', class_='content')
+       #  print("element " + str(j) + " found at index " + str(i))
+       #  j += 1
+        phone_span = content_div.find('span', class_='telephone')
+       #  print("element " + str(j) + " found at index " + str(i))
+       #  j += 1
+    except NoSuchElementException:
+        print("something in the initial search went wrong")
+
+    try:
+        # Find the website anchor element
+        website_anchor = driver.find_element(By.CSS_SELECTOR, ".detalles-contacto .content a.sitio-web")
+        website_url = website_anchor.get_attribute('href')
+    except NoSuchElementException:
+        website_url = "Website not available"
+    print("element " + str(j) + " found at index " + str(i))
+    j += 1
+
+    name_div = details_div.find('div', class_='text-center')
+    print("element " + str(j) + " found at index " + str(i))
+    j += 1
+    h1_div = name_div.find('h1', class_='mt-3 line-fluid')
+    print("element " + str(j) + " found at index " + str(i))
+    j += 1
+
+    try:
+        # claim_p = soup.find('p', class_='claim pb-2')
+        claim_text = "claim_p.find('a').text"
+    except NoSuchElementException:
+        claim_text = "no claim text available"
+    print("element " + str(j) + " found at index " + str(i))
+    j += 1
+
+    try:
+        # Find the website anchor element
+        phone_number = phone_span.find('b').text
+    except NoSuchElementException:
+        phone_number = "Phone number not available"
+    print("element " + str(j) + " found at index " + str(i))
+    j += 1
+
+    name = h1_div.text.strip()
+
+
+pageNumber = 1
 
 # Loop through search pages
 try:
@@ -38,6 +93,7 @@ try:
         # Loop through search results on the current page
         for i in range(len(all_listados)):
             try:
+                j = 1
                 start_time = time.time()
 
                 # Navigate through divs to find the exact span
@@ -72,51 +128,28 @@ try:
                 target_span = twelfth_div.find_element(By.CSS_SELECTOR, 'span[itemprop="name"]')
                 target_span_scroll = twelfth_div_scroll.find_element(By.CSS_SELECTOR, 'span[itemprop="name"]')
 
-                if i > 0:
-                    # Scroll the target element into view using JavaScript
-                    driver.execute_script("arguments[0].scrollIntoView();", target_span_scroll)
-                    # Click the element
-                    target_span.click()
-                else:
-                    # Click the element
-                    target_span.click()
+                # Scroll the target element into view using JavaScript
+                driver.execute_script("arguments[0].scrollIntoView();", target_span_scroll)
+                # Click the element
+                target_span.click()
 
-                # Get the page source
-                html = driver.page_source
+                # Threading stuff
+                thread = threading.Thread(target=scrape_element, args=(i, driver))
+                thread.start()
+                # Check the elapsed time in the main thread
+                while thread.is_alive():
+                    current_time = time.time()
+                    elapsed_time = current_time - start_time
 
-                soup = BeautifulSoup(html, 'html.parser')
-                details_div = soup.find('div', class_='contenedor')
-                contact_div = details_div.find('div', class_='detalles-contacto')
-                content_div = contact_div.find('div', class_='content')
-                phone_span = content_div.find('span', class_='telephone')
-
-                # Find the website anchor element
-                try:
-                    # Find the website anchor element
-                    website_anchor = driver.find_element(By.CSS_SELECTOR, ".detalles-contacto .content a.sitio-web")
-                    website_url = website_anchor.get_attribute('href')
-                except NoSuchElementException:
-                    # Handle the case where the website element is not found
-                    website_url = "Website not available"
-
-                name_div = details_div.find('div', class_='text-center')
-                h1_div = name_div.find('h1', class_='mt-3 line-fluid')
-                claim_p = soup.find('p', class_='claim pb-2')
-
-                # Extract and print the telephone number
-                try:
-                    # Find the website anchor element
-                    phone_number = phone_span.find('b').text
-                except NoSuchElementException:
-                    # Handle the case where the website element is not found
-                    phone_number = "Phone number not available"
-
-                name = h1_div.text.strip()
-                claim_text = claim_p.find('a').text
+                    # If the thread takes too long (4+ seconds), stop it
+                    if elapsed_time > 4:
+                        print("exceeded 4 s")
+                        thread.join()
+                        break
 
                 # Write to text file
                 with open('C:\\Users\\goldi\\Downloads\\buisnessPhones\\phones.txt', 'a') as f:
-                    f.write(f"{i +1}\n")
+                    f.write(f"Page {pageNumber}, element {i + 1}\n")
                     f.write(f"Name: {name}\n")
                     f.write(f"Category: {claim_text}\n")
                     f.write(f"Website: {website_url}\n")
@@ -125,17 +158,26 @@ try:
 
                 current_time = time.time()
                 elapsed_time = current_time - start_time
-                print("index "+ str(i+1) + " logged in: " + str(elapsed_time) + "s")
+                print("index " + str(i + 1) + " logged in: " + str(elapsed_time) + "s")
 
                 # Go back to the search results page
                 driver.back()
 
-                if i == listLen - 2:
-                    next_btn.click()
-
+            # Error with scraping result
             except Exception as e:
                 # Handle individual result scraping exceptions
                 print(f"Error scraping result {i + 1}: {str(e)}")
+
+        pageNumber += 1
+
+        # Check if there's a "Next" button and click it if it exists
+        try:
+            next_btn = driver.find_element(By.CSS_SELECTOR, 'i.fa.icon-flecha-derecha')
+            driver.execute_script("arguments[0].scrollIntoView();", next_btn)
+            driver.execute_script("arguments[0].click();", next_btn)
+        except NoSuchElementException:
+            print("No more 'Next' button. Exiting...")
+            break
 
 
 finally:
